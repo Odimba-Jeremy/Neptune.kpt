@@ -6,6 +6,8 @@ from functools import wraps
 from flask import Flask, request, jsonify, session
 
 app = Flask(__name__)
+from flask_cors import CORS
+CORS(app, supports_credentials=True, origins=["*"])
 app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026'
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
