@@ -12,7 +12,7 @@ from sqlalchemy import func, text
 # ------------------------- CONFIGURATION -------------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026-change-in-production'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Jeremie322K%3F@db.tpntjwffektufspmarow.supabase.co:5432/postgres'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Jeremie322K%3F@db.tpntjwffektufspmarow.supabase.co:6543/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
