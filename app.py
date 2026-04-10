@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify, session
 app = Flask(__name__)
 from flask_cors import CORS
 CORS(app, supports_credentials=True, origins=[
-    "http://localhost:8080",
+    "https://hospitalconecter.web.app",
     "https://neptune-kpt.onrender.com"
 ])
 app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026'
