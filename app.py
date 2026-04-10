@@ -7,14 +7,16 @@ from flask import Flask, request, jsonify, session
 
 app = Flask(__name__)
 from flask_cors import CORS
-CORS(app, supports_credentials=True, origins=[
-    "https://hospitalconecter.web.app",
-    "https://neptune-kpt.onrender.com"
-])
+CORS(app,
+     supports_credentials=True,
+     origins=[
+        "http://localhost:3000",
+        "https://neptune-kpt.onrender.com"
+     ])
 app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026'
 app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = 'None'
+app.config['SESSION_COOKIE_SAMESITE'] = True
 
 # ============================================================
 # GESTION DES FICHIERS JSON
