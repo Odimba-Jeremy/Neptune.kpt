@@ -14,9 +14,9 @@ CORS(app,
         "https://neptune-kpt.onrender.com"
      ])
 app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026'
-app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_HTTPONLY'] = 'None'
-app.config['SESSION_COOKIE_SAMESITE'] = True
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
 # ============================================================
 # GESTION DES FICHIERS JSON
