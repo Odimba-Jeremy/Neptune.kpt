@@ -3,26 +3,20 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
+import jwt
 
 app = Flask(__name__)
-from flask_cors import CORS
-CORS(app,
-     supports_credentials=True,
-     origins=[
-        "http://localhost:3000",
-        "https://neptune-kpt.onrender.com"
-     ])
-app.config['SECRET_KEY'] = 'campus-connect-secret-key-2026'
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+
+# Pas de CORS - à gérer par un proxy ou configuration nginx
+
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'campus-connect-secret-key-2026')
+JWT_EXPIRATION = timedelta(days=7)
 
 # ============================================================
 # GESTION DES FICHIERS JSON
 # ============================================================
 DATA_DIR = 'data'
-
 os.makedirs(DATA_DIR, exist_ok=True)
 
 USERS_FILE = os.path.join(DATA_DIR, 'users.json')
@@ -48,65 +42,38 @@ def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False, default=str)
 
-def init_data():
-    if not os.path.exists(USERS_FILE):
-        hashed = 'fake_hash_admin'
-        admin = {
-            'id': 1,
-            'uuid': str(uuid.uuid4()),
-            'email': 'admin@campusconnect.app',
-            'password': 'Admin@2026',
-            'full_name': 'Administrateur Principal',
-            'university': 'Campus Central',
-            'role': 'admin',
-            'status': 'active',
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
-        }
-        save_json(USERS_FILE, [admin])
-    
-    if not os.path.exists(GROUPS_FILE):
-        save_json(GROUPS_FILE, [
-            {'id': 1, 'title': 'Club Informatique', 'description': 'Échange sur les technologies', 'tag': 'Tech', 'members': 45},
-            {'id': 2, 'title': 'Bibliothèque', 'description': 'Partage de ressources', 'tag': 'Académique', 'members': 120}
-        ])
-    
-    if not os.path.exists(EVENTS_FILE):
-        save_json(EVENTS_FILE, [
-            {'id': 1, 'title': 'Conférence sur l\'IA', 'description': 'Par le professeur Martin', 'date': (datetime.utcnow() + timedelta(days=7)).isoformat(), 'location': 'Amphi A', 'audience': 'Étudiants'}
-        ])
-    
-    if not os.path.exists(MARKETPLACE_FILE):
-        save_json(MARKETPLACE_FILE, [
-            {'id': 1, 'title': 'Livres de maths', 'description': 'Lot de 3 livres', 'price': '15€', 'category': 'Livres', 'seller': 'Marie'}
-        ])
-    
-    if not os.path.exists(POSTS_FILE):
-        save_json(POSTS_FILE, [])
-    
-    if not os.path.exists(CONVERSATIONS_FILE):
-        save_json(CONVERSATIONS_FILE, [])
-    
-    if not os.path.exists(MESSAGES_FILE):
-        save_json(MESSAGES_FILE, [])
-    
-    if not os.path.exists(NOTIFICATIONS_FILE):
-        save_json(NOTIFICATIONS_FILE, [])
-    
-    if not os.path.exists(RECOVERIES_FILE):
-        save_json(RECOVERIES_FILE, [])
-    
-    if not os.path.exists(BROADCASTS_FILE):
-        save_json(BROADCASTS_FILE, [])
-    
-    if not os.path.exists(ADS_FILE):
-        save_json(ADS_FILE, [])
-    
-    if not os.path.exists(AUDIT_FILE):
-        save_json(AUDIT_FILE, [])
-
 def get_next_id(data):
     return max([item['id'] for item in data] + [0]) + 1
+
+# ============================================================
+# JWT FUNCTIONS
+# ============================================================
+def generate_token(user_id):
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + JWT_EXPIRATION,
+        'iat': datetime.utcnow()
+    }
+    return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+def decode_token(token):
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        return payload.get('user_id')
+    except:
+        return None
+
+def get_user_from_token():
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None
+    token = auth_header[7:]
+    user_id = decode_token(token)
+    if not user_id:
+        return None
+    users = load_json(USERS_FILE)
+    user = next((u for u in users if u['id'] == user_id and u['status'] == 'active'), None)
+    return user
 
 # ============================================================
 # AUTH DECORATORS
@@ -114,13 +81,9 @@ def get_next_id(data):
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify({'error': 'Non authentifié'}), 401
-        users = load_json(USERS_FILE)
-        user = next((u for u in users if u['id'] == user_id and u['status'] == 'active'), None)
+        user = get_user_from_token()
         if not user:
-            return jsonify({'error': 'Compte invalide ou bloqué'}), 401
+            return jsonify({'error': 'Non authentifié'}), 401
         return f(user, *args, **kwargs)
     return decorated
 
@@ -177,6 +140,62 @@ def ensure_conversation(user1_id, user2_id):
         save_json(CONVERSATIONS_FILE, conversations)
     return conv
 
+def init_data():
+    if not os.path.exists(USERS_FILE):
+        admin = {
+            'id': 1,
+            'uuid': str(uuid.uuid4()),
+            'email': 'admin@campusconnect.app',
+            'password': 'Admin@2026',
+            'full_name': 'Administrateur Principal',
+            'university': 'Campus Central',
+            'role': 'admin',
+            'status': 'active',
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        save_json(USERS_FILE, [admin])
+    
+    if not os.path.exists(GROUPS_FILE):
+        save_json(GROUPS_FILE, [
+            {'id': 1, 'title': 'Club Informatique', 'description': 'Échange sur les technologies', 'tag': 'Tech', 'members': 45},
+            {'id': 2, 'title': 'Bibliothèque', 'description': 'Partage de ressources', 'tag': 'Académique', 'members': 120}
+        ])
+    
+    if not os.path.exists(EVENTS_FILE):
+        save_json(EVENTS_FILE, [
+            {'id': 1, 'title': 'Conférence sur l\'IA', 'description': 'Par le professeur Martin', 'date': (datetime.utcnow() + timedelta(days=7)).isoformat(), 'location': 'Amphi A', 'audience': 'Étudiants'}
+        ])
+    
+    if not os.path.exists(MARKETPLACE_FILE):
+        save_json(MARKETPLACE_FILE, [
+            {'id': 1, 'title': 'Livres de maths', 'description': 'Lot de 3 livres', 'price': '15€', 'category': 'Livres', 'seller': 'Marie'}
+        ])
+    
+    if not os.path.exists(POSTS_FILE):
+        save_json(POSTS_FILE, [])
+    
+    if not os.path.exists(CONVERSATIONS_FILE):
+        save_json(CONVERSATIONS_FILE, [])
+    
+    if not os.path.exists(MESSAGES_FILE):
+        save_json(MESSAGES_FILE, [])
+    
+    if not os.path.exists(NOTIFICATIONS_FILE):
+        save_json(NOTIFICATIONS_FILE, [])
+    
+    if not os.path.exists(RECOVERIES_FILE):
+        save_json(RECOVERIES_FILE, [])
+    
+    if not os.path.exists(BROADCASTS_FILE):
+        save_json(BROADCASTS_FILE, [])
+    
+    if not os.path.exists(ADS_FILE):
+        save_json(ADS_FILE, [])
+    
+    if not os.path.exists(AUDIT_FILE):
+        save_json(AUDIT_FILE, [])
+
 # ============================================================
 # ROUTES AUTH
 # ============================================================
@@ -205,18 +224,21 @@ def register():
     }
     users.append(new_user)
     save_json(USERS_FILE, users)
-    session['user_id'] = new_user['id']
     
+    token = generate_token(new_user['id'])
     create_notification(new_user['id'], 'Bienvenue sur Campus Connect', 'Votre compte a été créé avec succès.', 'success')
     
     return jsonify({
-        'id': new_user['id'],
-        'uuid': new_user['uuid'],
-        'email': new_user['email'],
-        'fullName': new_user['full_name'],
-        'university': new_user['university'],
-        'role': new_user['role'],
-        'status': new_user['status']
+        'token': token,
+        'user': {
+            'id': new_user['id'],
+            'uuid': new_user['uuid'],
+            'email': new_user['email'],
+            'fullName': new_user['full_name'],
+            'university': new_user['university'],
+            'role': new_user['role'],
+            'status': new_user['status']
+        }
     }), 201
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -233,15 +255,18 @@ def login():
     if user['status'] != 'active':
         return jsonify({'error': f'Compte {user["status"]}. Contactez l\'administration.'}), 403
     
-    session['user_id'] = user['id']
+    token = generate_token(user['id'])
     return jsonify({
-        'id': user['id'],
-        'uuid': user['uuid'],
-        'email': user['email'],
-        'fullName': user['full_name'],
-        'university': user['university'],
-        'role': user['role'],
-        'status': user['status']
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'uuid': user['uuid'],
+            'email': user['email'],
+            'fullName': user['full_name'],
+            'university': user['university'],
+            'role': user['role'],
+            'status': user['status']
+        }
     }), 200
 
 @app.route('/api/auth/me', methods=['GET'])
@@ -258,8 +283,8 @@ def me(user):
     }), 200
 
 @app.route('/api/auth/logout', methods=['POST'])
-def logout():
-    session.clear()
+@login_required
+def logout(user):
     return jsonify({'ok': True}), 200
 
 @app.route('/api/auth/recover', methods=['POST'])
